@@ -1,5 +1,4 @@
-﻿// src/EasyOpenXml.Excel/Internals/OpenXmlGuards.cs
-using System;
+﻿using System;
 using DocumentFormat.OpenXml.Packaging;
 
 namespace EasyOpenXml.Excel.Internals

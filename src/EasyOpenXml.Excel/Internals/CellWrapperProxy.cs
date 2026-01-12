@@ -1,5 +1,4 @@
-﻿// src/EasyOpenXml.Excel/Internals/CellWrapperProxy.cs
-using System;
+﻿using System;
 using DocumentFormat.OpenXml.Packaging;
 using EasyOpenXml.Excel.Models;
 

@@ -6,7 +6,7 @@ internal static class Demo01_InitializeFile
 {
     public static void Run()
     {
-        // テンプレ想定（DemoConsole 配下の "Assets/template.xlsx" 等に置くと良い）
+        // テンプレ想定（DemoConsole 配下の "Assets/template.xlsx" ）
         var template = Path.Combine(AppContext.BaseDirectory, "Assets", "template.xlsx");
         if (!File.Exists(template))
         {

@@ -1,5 +1,4 @@
-﻿// src/EasyOpenXml.Excel/Models/CellWrapper.cs
-using EasyOpenXml.Excel.Internals;
+﻿using EasyOpenXml.Excel.Internals;
 
 namespace EasyOpenXml.Excel.Models
 {
