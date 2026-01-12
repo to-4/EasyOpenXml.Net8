@@ -39,12 +39,40 @@ namespace EasyOpenXml.Excel
         {
             SetValue(sx, sy, sx, sy, value);
         }
-
         public void SetValue(int sx, int sy, int ex, int ey, object value)
         {
             EnsureNotDisposed();
             var pos = _internal.Pos(sx, sy, ex, ey);
             pos.Value = value;
+        }
+        public void SetValue(string cell, object value)
+        {
+            EnsureNotDisposed();
+            var c = _internal.Cell(cell);
+            c.Value = value;
+        }
+        public void SetValue(string cell, int cx, int cy, object value)
+        {
+            EnsureNotDisposed();
+            var c = _internal.Cell(cell, cx, cy);
+            c.Value = value;
+        }
+
+        public object GetValue(int sx, int sy)
+        {
+            EnsureNotDisposed();
+
+            // 1. Use internal Pos API
+            var pos = _internal.Pos(sx, sy);
+
+            // 2. Delegate to PosProxy.GetValue()
+            return pos.Value;
+        }
+        public object GetValue(string cell)
+        {
+            EnsureNotDisposed();
+            var c = _internal.Cell(cell);
+            return c.Value;
         }
 
         public void FinalizeFile(bool save = true)

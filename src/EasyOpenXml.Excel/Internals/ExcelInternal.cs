@@ -63,6 +63,21 @@ namespace EasyOpenXml.Excel.Internals
             return new Pos(proxy);
         }
 
+        internal CellWrapper Cell(string cell)
+            => Cell(cell, 0, 0);
+
+        internal CellWrapper Cell(string cell, int cx, int cy)
+        {
+            var proxy = new CellWrapperProxy(
+                _document,
+                _sheetManager.CurrentWorksheetPart,
+                cell,
+                cx,
+                cy);
+
+            return new CellWrapper(proxy);
+        }
+
         public void Dispose()
         {
             _document?.Dispose();

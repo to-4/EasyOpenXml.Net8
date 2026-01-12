@@ -12,10 +12,10 @@ internal static class DemoRunner
 
         var demos = new Dictionary<string, Action>
         {
-            { "1", Demos.Demo01_CreateNew.Run },
-            //{ "2", Demos.Demo02_OpenAndOverwrite.Run },
-            //{ "3", Demos.Demo03_SetValueRc.Run },
-            //{ "4", Demos.Demo04_CopyRange.Run },
+            { "1", Demos.Demo01_InitializeFile.Run },
+            { "2", Demos.Demo02_SheetSelect.Run },
+            { "3", Demos.Demo03_GetValue.Run },
+            { "4", Demos.Demo04_GetCellValue.Run },
         };
 
         // 引数なし or all → 全実行
