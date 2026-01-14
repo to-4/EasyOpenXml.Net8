@@ -230,5 +230,39 @@ namespace EasyOpenXml.Excel.Internals
 
             _worksheetPart.Worksheet.Save();
         }
+
+        internal CellSnapshot CaptureSnapshot()
+        {
+            var cell = GetOrCreateCell(_sx, _sy, create: false);
+
+            if (cell == null)
+            {
+                return new CellSnapshot
+                {
+                    Value = null,
+                    IsString = false,
+                    StyleIndex = 0
+                };
+            }
+
+            return new CellSnapshot
+            {
+                Value = GetValue(),
+                IsString = cell.DataType?.Value == CellValues.SharedString,
+                StyleIndex = cell.StyleIndex?.Value ?? 0
+            };
+        }
+
+        internal void ApplySnapshot(CellSnapshot snapshot)
+        {
+            // 1. Apply value
+            SetValue(snapshot.Value, snapshot.IsString);
+
+            // 2. Apply style
+            if (snapshot.StyleIndex != 0)
+            {
+                ApplyStyle(snapshot.StyleIndex);
+            }
+        }
     }
 }

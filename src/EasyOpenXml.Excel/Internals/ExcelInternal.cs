@@ -10,6 +10,7 @@ namespace EasyOpenXml.Excel.Internals
         private SpreadsheetDocument _document;
         private SheetManager _sheetManager;
         private bool _opened;
+        private CellSnapshot _clipboard;
 
         internal int OpenBook(string strFileName, string strOverlay)
         {
@@ -76,6 +77,16 @@ namespace EasyOpenXml.Excel.Internals
                 cy);
 
             return new CellWrapper(proxy);
+        }
+
+        internal void SetClipboard(CellSnapshot snapshot)
+        {
+            _clipboard = snapshot;
+        }
+
+        internal CellSnapshot GetClipboard()
+        {
+            return _clipboard;
         }
 
         public void Dispose()

@@ -18,6 +18,7 @@ internal static class DemoRunner
             { "4", Demos.Demo04_GetCellValue.Run },
             { "5", Demos.Demo05_Pos.Run },
             { "6", Demos.Demo06_PosAttr.Run },
+            { "7", Demos.Demo07_PosCopyPaste.Run },
         };
 
         // 引数なし or all → 全実行
