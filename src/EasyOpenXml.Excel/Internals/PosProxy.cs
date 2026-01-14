@@ -41,6 +41,8 @@ namespace EasyOpenXml.Excel.Internals
             _sharedStrings = new SharedStringManager(_document);
         }
 
+        internal SpreadsheetDocument Document => _document;
+
         internal object GetValue()
         {
             // MVP: read only the top-left cell of the range
@@ -213,6 +215,20 @@ namespace EasyOpenXml.Excel.Internals
 
             var c = aCol.CompareTo(bCol);
             return c != 0 ? c : aRow.CompareTo(bRow);
+        }
+
+        internal void ApplyStyle(uint styleIndex)
+        {
+            for (int row = _sy; row <= _ey; row++)
+            {
+                for (int col = _sx; col <= _ex; col++)
+                {
+                    var cell = GetOrCreateCell(col, row, create: true);
+                    cell.StyleIndex = styleIndex;
+                }
+            }
+
+            _worksheetPart.Worksheet.Save();
         }
     }
 }

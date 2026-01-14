@@ -1,6 +1,7 @@
-﻿using System;
+﻿using EasyOpenXml.Excel.Internals;
+using EasyOpenXml.Excel.Models;
+using System;
 using System.Collections.Generic;
-using EasyOpenXml.Excel.Internals;
 
 namespace EasyOpenXml.Excel
 {
@@ -79,6 +80,18 @@ namespace EasyOpenXml.Excel
         {
             EnsureNotDisposed();
             _internal.CloseBook(save);
+        }
+
+        public Pos Pos(int sx, int sy)
+        {
+            EnsureNotDisposed();
+            return _internal.Pos(sx, sy, sx, sy);
+        }
+
+        public Pos Pos(int sx, int sy, int ex, int ey)
+        {
+            EnsureNotDisposed();
+            return _internal.Pos(sx, sy, ex, ey);
         }
 
         private void EnsureNotDisposed()
