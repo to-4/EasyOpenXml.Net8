@@ -62,6 +62,11 @@ namespace EasyOpenXml.Excel.Models
 
             _proxy.ApplySnapshot(snapshot);
         }
+
+        public void Merge()
+        {
+            _proxy.Merge();
+        }
     }
 }
 

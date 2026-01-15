@@ -264,5 +264,45 @@ namespace EasyOpenXml.Excel.Internals
                 ApplyStyle(snapshot.StyleIndex);
             }
         }
+
+        internal void Merge()
+        {
+            // 1. Single cell range does not need merge
+            if (_sx == _ex && _sy == _ey)
+                return;
+
+            var worksheet = _worksheetPart.Worksheet;
+
+            // 2. Ensure MergeCells element exists
+            var mergeCells = worksheet.Elements<MergeCells>().FirstOrDefault();
+            if (mergeCells == null)
+            {
+                mergeCells = new MergeCells();
+
+                // Insert MergeCells after SheetData (Excel repair safe position)
+                var sheetData = worksheet.GetFirstChild<SheetData>();
+                if (sheetData != null)
+                    worksheet.InsertAfter(mergeCells, sheetData);
+                else
+                    worksheet.Append(mergeCells);
+            }
+
+            // 3. Build merge range reference (e.g. "A1:C3")
+            var from = AddressConverter.ToA1(_sx, _sy);
+            var to = AddressConverter.ToA1(_ex, _ey);
+            var refText = $"{from}:{to}";
+
+            // 4. Avoid duplicate merge entries (MVP: simple check)
+            var exists = mergeCells.Elements<MergeCell>()
+                .Any(m => string.Equals(m.Reference?.Value, refText, StringComparison.OrdinalIgnoreCase));
+
+            if (!exists)
+            {
+                mergeCells.Append(new MergeCell { Reference = refText });
+            }
+
+            // 5. Save worksheet
+            worksheet.Save();
+        }
     }
 }
