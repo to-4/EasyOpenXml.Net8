@@ -252,5 +252,4 @@ ExcelDocument.FinalizeFile
 
 ---
 
-次に読む → [public-api.md]
 

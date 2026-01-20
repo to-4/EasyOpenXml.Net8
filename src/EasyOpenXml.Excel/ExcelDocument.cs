@@ -94,6 +94,18 @@ namespace EasyOpenXml.Excel
             return _internal.Pos(sx, sy, ex, ey);
         }
 
+        public void PrintArea(int sx, int sy, int ex, int ey)
+        {
+            EnsureNotDisposed();
+            _internal.PrintArea(sx, sy, ex, ey);
+        }
+
+        public void PrintArea(string a1Range)
+        {
+            EnsureNotDisposed();
+            _internal.PrintArea(a1Range);
+        }
+
         private void EnsureNotDisposed()
         {
             if (_disposed)

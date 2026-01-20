@@ -95,5 +95,5 @@ excel.Pos(1, 1, 3, 3).Merge();
 
 ---
 
-次に読む → [architecture.md]
+
 

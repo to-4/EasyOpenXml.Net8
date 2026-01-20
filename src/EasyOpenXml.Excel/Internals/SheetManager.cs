@@ -16,6 +16,9 @@ namespace EasyOpenXml.Excel.Internals
         private int _currentIndex = -1;
         private WorksheetPart _currentWorksheetPart;
 
+        internal int CurrentIndex => _currentIndex;
+        internal string CurrentSheetName => _sheets[_currentIndex].Name;
+
         internal SheetManager(SpreadsheetDocument document)
         {
             if (document == null) throw new ArgumentNullException(nameof(document));

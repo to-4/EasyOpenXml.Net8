@@ -20,6 +20,7 @@ internal static class DemoRunner
             { "6", Demos.Demo06_PosAttr.Run },
             { "7", Demos.Demo07_PosCopyPaste.Run },
             { "8", Demos.Demo08_PosMerge.Run },
+            { "9", Demos.Demo09_PrintArea.Run },
         };
 
         // 引数なし or all → 全実行
