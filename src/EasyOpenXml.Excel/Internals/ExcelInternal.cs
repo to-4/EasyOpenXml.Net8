@@ -154,6 +154,63 @@ namespace EasyOpenXml.Excel.Internals
             return sheet.Name;
         }
 
+        internal void RowDelete(int sy, int count)
+        {
+            Guards.EnsureOpened(_opened);
+
+            if (sy < 0)
+                throw new ArgumentOutOfRangeException(nameof(sy));
+            if (count <= 0)
+                throw new ArgumentOutOfRangeException(nameof(count));
+
+            var wsPart = _sheetManager.CurrentWorksheetPart;
+            var worksheet = wsPart.Worksheet;
+            var sheetData = worksheet.GetFirstChild<SheetData>();
+
+            if (sheetData == null) return;
+
+            // OpenXML RowIndex is 1-based
+            uint startRow = (uint)(sy + 1);
+            uint endRow = startRow + (uint)count - 1;
+
+            // 1. Remove rows in [startRow, endRow]
+            var rowsToRemove = sheetData.Elements<Row>()
+                .Where(r => r.RowIndex != null &&
+                            r.RowIndex.Value >= startRow &&
+                            r.RowIndex.Value <= endRow)
+                .ToList();
+
+            foreach (var row in rowsToRemove)
+                row.Remove();
+
+            // 2. Shift rows below upward
+            foreach (var row in sheetData.Elements<Row>())
+            {
+                if (row.RowIndex == null) continue;
+                if (row.RowIndex.Value <= endRow) continue;
+
+                var newIndex = row.RowIndex.Value - (uint)count;
+                row.RowIndex.Value = newIndex;
+
+                // 3. Update CellReference for each cell in the row
+                foreach (var cell in row.Elements<Cell>())
+                {
+                    if (cell.CellReference == null) continue;
+
+                    AddressConverter.TryParseA1(
+                        cell.CellReference.Value,
+                        out var col,
+                        out var _);
+
+                    cell.CellReference.Value =
+                        AddressConverter.ToA1(col, (int)newIndex);
+                }
+            }
+
+            worksheet.Save();
+        }
+
+
         public void Dispose()
         {
             _document?.Dispose();

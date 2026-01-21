@@ -106,6 +106,12 @@ namespace EasyOpenXml.Excel
             _internal.PrintArea(a1Range);
         }
 
+        public void RowDelete(int sy, int count)
+        {
+            EnsureNotDisposed();
+            _internal.RowDelete(sy, count);
+        }
+
         private void EnsureNotDisposed()
         {
             if (_disposed)
