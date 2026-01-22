@@ -58,6 +58,11 @@ namespace EasyOpenXml.Excel
             var c = _internal.Cell(cell, cx, cy);
             c.Value = value;
         }
+        public void SetCalculationMode(CalculationMode mode)
+        {
+            EnsureNotDisposed();
+            _internal.SetCalculationMode(mode);
+        }
 
         public object GetValue(int sx, int sy)
         {

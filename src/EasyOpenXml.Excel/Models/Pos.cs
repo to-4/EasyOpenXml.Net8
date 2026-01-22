@@ -67,6 +67,14 @@ namespace EasyOpenXml.Excel.Models
         {
             _proxy.Merge();
         }
+
+        public void Merge(
+            HorizontalAlign horizontal,
+            VerticalAlign vertical,
+            bool wrapText = false)
+        {
+            _proxy.Merge(horizontal, vertical, wrapText);
+        }
     }
 }
 

@@ -25,6 +25,7 @@ internal static class Demo02_SheetSelect
 
         excel.SheetSelect(1); // Select Sheet2
         excel.SetValue(1, 1, "Hello");
+        excel.SetValue(1, 3, DateTime.Now); // 日付（OAデータをセット、書式を変えれば日付や時刻を表示できる）
 
         // == ↑ 確認用コード ↑ == //
 

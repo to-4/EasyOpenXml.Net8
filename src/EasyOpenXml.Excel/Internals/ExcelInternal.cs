@@ -102,23 +102,38 @@ namespace EasyOpenXml.Excel.Internals
                 wb.InsertAfter(definedNames, wb.Sheets);
             }
 
-            // 2. 既存の Print_Area はすべて削除（安全第一）
+            // 2. 現在シートの LocalSheetId（0-based）を求める
+            //    LocalSheetId：「定義名（DefinedName）が、どのシートに属するか」を示す番号
+            var sheets = wb.Sheets!.Elements<Sheet>().ToList();
+
+            var currentName = _sheetManager.CurrentSheetName;
+            var sheetIndex = sheets.FindIndex(s => string.Equals(s.Name?.Value, currentName, StringComparison.Ordinal));
+
+            if (sheetIndex < 0)
+                throw new InvalidOperationException($"Sheet not found: {currentName}");
+
+            uint localSheetId = (uint)sheetIndex;
+
+            // 3. 既存の Print_Area（同一シート分のみ）を削除
             var old = definedNames.Elements<DefinedName>()
-                .Where(d => d.Name?.Value == "_xlnm.Print_Area")
+                .Where(d => d.Name?.Value == "_xlnm.Print_Area"
+                         && d.LocalSheetId != null
+                         && d.LocalSheetId.Value == localSheetId)
                 .ToList();
 
             foreach (var d in old)
                 d.Remove();
 
-            // 3. 正しい式を作る
+            // 4. 正しい式を作る
             var sheetName = _sheetManager.CurrentSheetName.Replace("'", "''");
             var area = $"{AddressConverter.ToAbsoluteA1(sx, sy)}:{AddressConverter.ToAbsoluteA1(ex, ey)}";
             var formula = $"'{sheetName}'!{area}";
 
-            // 4. 新規に 1 件だけ追加（LocalSheetId なし）
+            // 5. シートスコープで追加（LocalSheetId が重要）
             definedNames.Append(new DefinedName
             {
                 Name = "_xlnm.Print_Area",
+                LocalSheetId = localSheetId,
                 Text = formula
             });
 
@@ -210,12 +225,57 @@ namespace EasyOpenXml.Excel.Internals
             worksheet.Save();
         }
 
+        internal void SetCalculationMode(CalculationMode mode)
+        {
+            Guards.EnsureOpened(_opened);
+            Guards.EnsureWorkbookPart(_document);
 
+            var workbook = _document.WorkbookPart.Workbook;
+
+            // 1. Ensure CalculationProperties exists
+            var calcPr = workbook.CalculationProperties;
+            if (calcPr == null)
+            {
+                calcPr = new CalculationProperties();
+                workbook.Append(calcPr);
+            }
+
+            // 2. Apply mode
+            switch (mode)
+            {
+                case CalculationMode.Manual:
+                    calcPr.CalculationMode = CalculateModeValues.Manual;
+                    calcPr.FullCalculationOnLoad = false;
+                    break;
+
+                case CalculationMode.Automatic:
+                default:
+                    calcPr.CalculationMode = CalculateModeValues.Auto;
+                    calcPr.FullCalculationOnLoad = false;
+                    break;
+            }
+
+            workbook.Save();
+        }
         public void Dispose()
         {
             _document?.Dispose();
             _document = null;
             _opened = false;
+        }
+
+        private void EnsureRecalcOnOpen()
+        {
+            var workbook = _document.WorkbookPart.Workbook;
+
+            var calcPr = workbook.CalculationProperties ?? new CalculationProperties();
+
+            // Excel を開いたとき必ず再計算
+            calcPr.CalculationMode = CalculateModeValues.Auto;
+            calcPr.FullCalculationOnLoad = true;
+
+            workbook.CalculationProperties = calcPr;
+            workbook.Save();
         }
     }
 }

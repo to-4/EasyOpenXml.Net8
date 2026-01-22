@@ -1,5 +1,7 @@
-﻿using DocumentFormat.OpenXml.Packaging;
+﻿using DocumentFormat.OpenXml;
+using DocumentFormat.OpenXml.Packaging;
 using DocumentFormat.OpenXml.Spreadsheet;
+using EasyOpenXml.Excel.Models;
 using System.Globalization;
 using OXmlFont = DocumentFormat.OpenXml.Spreadsheet.Font;
 
@@ -208,5 +210,61 @@ namespace EasyOpenXml.Excel.Internals
             }
             return max + 1;
         }
+
+        internal uint GetOrCreateAlignmentStyle(
+            uint baseStyleIndex,
+            HorizontalAlign hAlign,
+            VerticalAlign vAlign,
+            bool wrapText)
+        {
+            var key = $"align:{baseStyleIndex}:{hAlign}:{vAlign}:{wrapText}";
+            if (_styleCache.TryGetValue(key, out var cached))
+                return cached;
+
+            var ss = _workbookPart.WorkbookStylesPart.Stylesheet;
+            var cellFormats = ss.CellFormats;
+
+            var baseCf = (CellFormat)cellFormats.ChildElements[(int)baseStyleIndex];
+            var newCf = (CellFormat)baseCf.CloneNode(true);
+
+            var alignment = newCf.Alignment ?? (newCf.Alignment = new Alignment());
+
+            alignment.Horizontal = ToHorizontal(hAlign);
+            alignment.Vertical = ToVertical(vAlign);
+            alignment.WrapText = wrapText;
+
+            newCf.ApplyAlignment = true;
+
+            cellFormats.Append(newCf);
+            cellFormats.Count = (uint)cellFormats.ChildElements.Count;
+
+            ss.Save();
+
+            var newIndex = (uint)(cellFormats.ChildElements.Count - 1);
+            _styleCache[key] = newIndex;
+            return newIndex;
+        }
+
+        private static EnumValue<HorizontalAlignmentValues>? ToHorizontal(HorizontalAlign h)
+        {
+            switch (h)
+            {
+                case HorizontalAlign.Left: return HorizontalAlignmentValues.Left;
+                case HorizontalAlign.Center: return HorizontalAlignmentValues.Center;
+                case HorizontalAlign.Right: return HorizontalAlignmentValues.Right;
+                default: return HorizontalAlignmentValues.General;
+            }
+        }
+
+        private static EnumValue<VerticalAlignmentValues>? ToVertical(VerticalAlign v)
+        {
+            switch (v)
+            {
+                case VerticalAlign.Top: return VerticalAlignmentValues.Top;
+                case VerticalAlign.Center: return VerticalAlignmentValues.Center;
+                default: return VerticalAlignmentValues.Bottom;
+            }
+        }
+
     }
 }

@@ -1,6 +1,7 @@
 ﻿using DocumentFormat.OpenXml;
 using DocumentFormat.OpenXml.Packaging;
 using DocumentFormat.OpenXml.Spreadsheet;
+using EasyOpenXml.Excel.Models;
 using System;
 using System.Globalization;
 using System.Linq;
@@ -304,5 +305,31 @@ namespace EasyOpenXml.Excel.Internals
             // 5. Save worksheet
             worksheet.Save();
         }
+
+        internal void Merge(
+            HorizontalAlign horizontal,
+            VerticalAlign vertical,
+            bool wrapText)
+        {
+            // 1. Merge cells (existing behavior)
+            Merge();
+
+            // 2. Apply alignment via StyleManager
+            var styleManager = new StyleManager(_document);
+
+            // 左上セルの既存 StyleIndex をベースにする
+            var baseCell = GetOrCreateCell(_sx, _sy, create: true);
+            var baseStyleIndex = baseCell.StyleIndex?.Value ?? 0U;
+
+            var newStyleIndex = styleManager.GetOrCreateAlignmentStyle(
+                baseStyleIndex,
+                horizontal,
+                vertical,
+                wrapText);
+
+            // 3. Apply style to merged range
+            ApplyStyle(newStyleIndex);
+        }
+
     }
 }

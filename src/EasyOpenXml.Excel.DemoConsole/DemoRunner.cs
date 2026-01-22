@@ -22,6 +22,7 @@ internal static class DemoRunner
             { "8", Demos.Demo08_PosMerge.Run },
             { "9", Demos.Demo09_PrintArea.Run },
             { "10", Demos.Demo10_RowDelete.Run },
+            { "11", Demos.Demo11_SetCalcMode.Run },
         };
 
         // 引数なし or all → 全実行
