@@ -71,7 +71,7 @@ namespace EasyOpenXml.Excel
 
         private static string Prefix()
         {
-            return $"{DateTime.Now.ToString("yyyy/MM/dd HH:mm:ss")}";
+            return $"{DateTime.Now.ToString("[yyyy/MM/dd HH:mm:ss]")}";
         }
 
         private static string FormatLabel(string label)

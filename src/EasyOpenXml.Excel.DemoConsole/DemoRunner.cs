@@ -12,17 +12,17 @@ internal static class DemoRunner
 
         var demos = new Dictionary<string, Action>
         {
-            //{ "1", Demos.Demo01_InitializeFile.Run },
-            //{ "2", Demos.Demo02_SheetSelect.Run },
-            //{ "3", Demos.Demo03_GetValue.Run },
-            //{ "4", Demos.Demo04_GetCellValue.Run },
-            //{ "5", Demos.Demo05_Pos.Run },
-            //{ "6", Demos.Demo06_PosAttr.Run },
-            //{ "7", Demos.Demo07_PosCopyPaste.Run },
-            //{ "8", Demos.Demo08_PosMerge.Run },
-            //{ "9", Demos.Demo09_PrintArea.Run },
-            //{ "10", Demos.Demo10_RowDelete.Run },
-            //{ "11", Demos.Demo11_SetCalcMode.Run },
+            { "1", Demos.Demo01_InitializeFile.Run },
+            { "2", Demos.Demo02_SheetSelect.Run },
+            { "3", Demos.Demo03_GetValue.Run },
+            { "4", Demos.Demo04_GetCellValue.Run },
+            { "5", Demos.Demo05_Pos.Run },
+            { "6", Demos.Demo06_PosAttr.Run },
+            { "7", Demos.Demo07_PosCopyPaste.Run },
+            { "8", Demos.Demo08_PosMerge.Run },
+            { "9", Demos.Demo09_PrintArea.Run },
+            { "10", Demos.Demo10_RowDelete.Run },
+            { "11", Demos.Demo11_SetCalcMode.Run },
             { "12", Demos.Demo12_Logger.Run },
         };
 
