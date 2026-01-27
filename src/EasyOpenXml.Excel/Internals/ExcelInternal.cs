@@ -1,8 +1,9 @@
-﻿using System;
-using System.Collections.Generic;
-using DocumentFormat.OpenXml.Packaging;
+﻿using DocumentFormat.OpenXml.Packaging;
 using DocumentFormat.OpenXml.Spreadsheet;
 using EasyOpenXml.Excel.Models;
+using System;
+using System.Collections.Generic;
+using System.Text;
 
 namespace EasyOpenXml.Excel.Internals
 {
@@ -188,7 +189,23 @@ namespace EasyOpenXml.Excel.Internals
             uint startRow = (uint)(sy + 1);
             uint endRow = startRow + (uint)count - 1;
 
-            // 1. Remove rows in [startRow, endRow]
+            // 1. Remove shared formulas in target rows (defensive)
+            foreach (var cell in sheetData
+                .Descendants<Cell>()
+                .Where(c => c.CellFormula?.FormulaType?.Value == CellFormulaValues.Shared))
+            {
+                // Shared formulas are fragile when rows are deleted.
+                // We remove shared attributes and keep formula text if any.
+                var f = cell.CellFormula;
+                if (f != null)
+                {
+                    f.SharedIndex = null;
+                    f.Reference = null;
+                    f.FormulaType = null;
+                }
+            }
+
+            // 2. Remove rows in [startRow, endRow]
             var rowsToRemove = sheetData.Elements<Row>()
                 .Where(r => r.RowIndex != null &&
                             r.RowIndex.Value >= startRow &&
@@ -198,7 +215,7 @@ namespace EasyOpenXml.Excel.Internals
             foreach (var row in rowsToRemove)
                 row.Remove();
 
-            // 2. Shift rows below upward
+            // 3. Shift rows below upward
             foreach (var row in sheetData.Elements<Row>())
             {
                 if (row.RowIndex == null) continue;
@@ -207,7 +224,6 @@ namespace EasyOpenXml.Excel.Internals
                 var newIndex = row.RowIndex.Value - (uint)count;
                 row.RowIndex.Value = newIndex;
 
-                // 3. Update CellReference for each cell in the row
                 foreach (var cell in row.Elements<Cell>())
                 {
                     if (cell.CellReference == null) continue;
@@ -222,9 +238,14 @@ namespace EasyOpenXml.Excel.Internals
                 }
             }
 
-            worksheet.Save();
-        }
+            // 4. Remove calcChain (safe & recommended)
+            RemoveCalcChain();
 
+            worksheet.Save();
+
+            // 5. Ensure recalculation on open
+            EnsureRecalcOnOpen();
+        }
         internal void SetCalculationMode(CalculationMode mode)
         {
             Guards.EnsureOpened(_opened);
@@ -264,6 +285,73 @@ namespace EasyOpenXml.Excel.Internals
             _opened = false;
         }
 
+        internal void ExportSharedFormulasCsv(string outputPath)
+        {
+            Guards.EnsureOpened(_opened);
+
+            if (string.IsNullOrWhiteSpace(outputPath))
+                throw new ArgumentException("outputPath is required.", nameof(outputPath));
+
+            var sb = new StringBuilder();
+
+            // Header
+            sb.AppendLine("SheetName,Cell,Row,Col,SharedIndex,Formula,Reference");
+
+            var wb = _document.WorkbookPart.Workbook;
+            var sheets = wb.Sheets?.Elements<Sheet>().ToList() ?? new List<Sheet>();
+
+            foreach (var sheet in sheets)
+            {
+                if (sheet.Id == null) continue;
+
+                var worksheetPart = (WorksheetPart)_document.WorkbookPart.GetPartById(sheet.Id);
+                var worksheet = worksheetPart.Worksheet;
+                var sheetData = worksheet.GetFirstChild<SheetData>();
+                if (sheetData == null) continue;
+
+                var sheetName = sheet.Name?.Value ?? string.Empty;
+
+                var sharedFormulaCells = sheetData
+                    .Descendants<Cell>()
+                    .Where(c => c.CellFormula?.FormulaType?.Value == CellFormulaValues.Shared);
+
+                foreach (var cell in sharedFormulaCells)
+                {
+                    var cellRef = cell.CellReference?.Value ?? string.Empty;
+
+                    // parse column/row (A1 -> col, row)
+                    int col = 0, row = 0;
+                    if (!string.IsNullOrEmpty(cellRef))
+                    {
+                        AddressConverter.TryParseA1(cellRef, out col, out row);
+                    }
+
+                    var formulaText = cell.CellFormula?.Text ?? string.Empty;
+                    var sharedIndexText = cell.CellFormula?.SharedIndex != null
+                        ? cell.CellFormula.SharedIndex.Value.ToString()
+                        : string.Empty;
+                    var referenceText = cell.CellFormula?.Reference?.Value ?? string.Empty;
+
+                    // CSV escape fields
+                    sb.Append(EscapeCsv(sheetName)); sb.Append(',');
+                    sb.Append(EscapeCsv(cellRef)); sb.Append(',');
+                    sb.Append(row.ToString()); sb.Append(',');
+                    sb.Append(col.ToString()); sb.Append(',');
+                    sb.Append(EscapeCsv(sharedIndexText)); sb.Append(',');
+                    sb.Append(EscapeCsv(formulaText)); sb.Append(',');
+                    sb.AppendLine(EscapeCsv(referenceText));
+                }
+            }
+
+            // Ensure directory exists
+            var dir = Path.GetDirectoryName(outputPath);
+            if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
+                Directory.CreateDirectory(dir);
+
+            // Write UTF-8 without BOM (consumer friendly)
+            File.WriteAllText(outputPath, sb.ToString(), new UTF8Encoding(false));
+        }
+
         private void EnsureRecalcOnOpen()
         {
             var workbook = _document.WorkbookPart.Workbook;
@@ -277,5 +365,52 @@ namespace EasyOpenXml.Excel.Internals
             workbook.CalculationProperties = calcPr;
             workbook.Save();
         }
+
+        private void RemoveCalcChain()
+        {
+            var wbPart = _document.WorkbookPart;
+            var calcChainPart = wbPart.CalculationChainPart;
+
+            if (calcChainPart != null)
+            {
+                wbPart.DeletePart(calcChainPart);
+            }
+        }
+
+        private Row GetOrCreateRow(SheetData sheetData, uint rowIndex)
+        {
+            // 1. 既存行を探す（RowIndex は r 属性）
+            var row = sheetData.Elements<Row>()
+                .FirstOrDefault(r => r.RowIndex?.Value == rowIndex);
+
+            if (row != null)
+                return row;
+
+            // 2. なければ新規作成
+            row = new Row { RowIndex = rowIndex };
+
+            // 3. 正しい順序で挿入（昇順を保証）
+            //    対象行より行番号が大きく、最も近い行を取得
+            var refRow = sheetData.Elements<Row>()
+                .FirstOrDefault(r => r.RowIndex?.Value > rowIndex);
+
+            if (refRow != null)
+                sheetData.InsertBefore(row, refRow); // 近い行の前に挿入
+            else
+                sheetData.Append(row); // 対象行より大きい番号の行がないので、末尾に追加
+
+            return row;
+        }
+
+        private static string EscapeCsv(string value)
+        {
+            if (value == null) return string.Empty;
+            var needsQuote = value.Contains(',') || value.Contains('"') || value.Contains('\r') || value.Contains('\n');
+            if (!needsQuote) return value;
+            var escaped = value.Replace("\"", "\"\"");
+            return $"\"{escaped}\"";
+        }
+
+
     }
 }

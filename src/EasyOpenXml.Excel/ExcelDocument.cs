@@ -117,6 +117,11 @@ namespace EasyOpenXml.Excel
             _internal.RowDelete(sy, count);
         }
 
+        public void ExportSharedFormulasCsv(string outputCsvFile)
+        {
+            _internal.ExportSharedFormulasCsv(outputCsvFile);
+        }
+
         private void EnsureNotDisposed()
         {
             if (_disposed)
