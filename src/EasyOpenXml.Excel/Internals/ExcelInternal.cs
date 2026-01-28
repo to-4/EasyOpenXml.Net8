@@ -14,6 +14,8 @@ namespace EasyOpenXml.Excel.Internals
         private bool _opened;
         private CellSnapshot _clipboard;
 
+        // 列スタイルのキャッシュ（Min/Max を展開した辞書）
+        private Dictionary<int, uint?>? _colStyleCache;
         internal int OpenBook(string strFileName, string strOverlay)
         {
             try

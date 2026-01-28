@@ -19,6 +19,11 @@ namespace EasyOpenXml.Excel.Internals
 
         private readonly SharedStringManager _sharedStrings;
 
+        private uint _templateStyleIndex = 0; // 最後の逃げ（Normal など）。必要なら差し替え。
+
+        // 列スタイルのキャッシュ（Min/Max を展開した辞書）
+        private Dictionary<int, uint?>? _colStyleCache;
+
         internal PosProxy(
             SpreadsheetDocument document,
             WorksheetPart worksheetPart,
@@ -205,6 +210,49 @@ namespace EasyOpenXml.Excel.Internals
             return cell;
         }
 
+        /// <summary>
+        /// セルを取得。なければ作成。
+        /// <para>新規作成時のみ StyleIndex を継承（行→列→左→上→テンプレ）</para>
+        /// <para>既存セルの StyleIndex は変更しない</para>
+        /// </summary>
+        internal Cell GetOrCreateCellWithStyle(int rowIndex, int columnIndex, bool create = true)
+        {
+
+            var sheetData = _worksheetPart.Worksheet.GetFirstChild<SheetData>();
+            if (sheetData == null)
+            {
+                if (!create) return null;
+                sheetData = _worksheetPart.Worksheet.AppendChild(new SheetData());
+            }
+
+            if (sheetData == null) throw new ArgumentNullException(nameof(sheetData));
+            if (rowIndex < 1) throw new ArgumentOutOfRangeException(nameof(rowIndex));
+            if (columnIndex < 1) throw new ArgumentOutOfRangeException(nameof(columnIndex));
+
+            uint r = (uint)rowIndex;
+            string cellRef = AddressConverter.ToA1(columnIndex, rowIndex);
+
+            // 1) Row を取得/作成
+            var row = GetOrCreateRow(sheetData, r);
+
+            // 2) 既存セルがあればそれを返す（StyleIndex は一切触らない）
+            var existing = row.Elements<Cell>().FirstOrDefault(c => c.CellReference?.Value == cellRef);
+            if (existing != null) return existing;
+
+            // 3) 新規セル作成
+            var newCell = new Cell { CellReference = cellRef };
+
+            // 4) 新規セルの StyleIndex を推定（行→列→左→上→テンプレ）
+            uint? style = InferStyleIndexForNewCell(sheetData, row, r, columnIndex);
+            if (style.HasValue)
+                newCell.StyleIndex = style.Value;
+
+            // 5) セルを列順で挿入（A, B, C... の順。安全）
+            InsertCellInOrder(row, newCell);
+
+            return newCell;
+        }
+
         private static int CompareCellReference(string a, string b)
         {
             // 1. Compare by column index first, then row index
@@ -331,5 +379,137 @@ namespace EasyOpenXml.Excel.Internals
             ApplyStyle(newStyleIndex);
         }
 
+
+        private Row GetOrCreateRow(SheetData sheetData, uint rowIndex)
+        {
+            var row = sheetData.Elements<Row>().FirstOrDefault(r => r.RowIndex?.Value == rowIndex);
+            if (row != null) return row;
+
+            row = new Row { RowIndex = rowIndex };
+
+            // RowIndex 昇順に挿入（整っていた方が安全）
+            var refRow = sheetData.Elements<Row>()
+                .FirstOrDefault(r => r.RowIndex != null && r.RowIndex.Value > rowIndex);
+
+            if (refRow != null) sheetData.InsertBefore(row, refRow);
+            else sheetData.AppendChild(row);
+
+            return row;
+        }
+
+        private uint? InferStyleIndexForNewCell(SheetData sheetData, Row row, uint rowIndex, int colIndex)
+        {
+            // ① 行スタイル
+            if (row.StyleIndex != null)
+                return row.StyleIndex.Value;
+
+            // ② 列スタイル
+            var colStyle = GetColumnStyleIndex(colIndex);
+            if (colStyle.HasValue)
+                return colStyle.Value;
+
+            // ③ 左隣セル（同じ行の colIndex-1）
+            var left = FindCellInRowByColumnIndex(row, colIndex - 1);
+            if (left?.StyleIndex != null)
+                return left.StyleIndex.Value;
+
+            // ④ 上セル（rowIndex-1 の同じ列）
+            if (rowIndex > 1)
+            {
+                var upperRow = sheetData.Elements<Row>().FirstOrDefault(x => x.RowIndex?.Value == rowIndex - 1);
+                if (upperRow != null)
+                {
+                    var upper = FindCellInRowByColumnIndex(upperRow, colIndex);
+                    if (upper?.StyleIndex != null)
+                        return upper.StyleIndex.Value;
+
+                    // 上の行に Row.StyleIndex があるなら、それを使う案もある（好み）
+                    // if (upperRow.StyleIndex != null) return upperRow.StyleIndex.Value;
+                }
+            }
+
+            // ⑤ テンプレート（既定）スタイル
+            // null を返すと StyleIndex 未指定＝標準（0）になるので、
+            // 「必ずテンプレ値を付けたい」なら _templateStyleIndex を返す。
+            return _templateStyleIndex;
+        }
+
+        private uint? GetColumnStyleIndex(int colIndex1Based)
+        {
+            _colStyleCache ??= BuildColumnStyleCache();
+            return _colStyleCache.TryGetValue(colIndex1Based, out var s) ? s : null;
+        }
+
+        private Dictionary<int, uint?> BuildColumnStyleCache()
+        {
+            var dic = new Dictionary<int, uint?>();
+
+            // Columns は Worksheet 直下にある（存在しないテンプレもある）
+
+            var cols = _worksheetPart.Worksheet.Elements<Columns>().FirstOrDefault();
+            if (cols == null) return dic;
+
+            foreach (var col in cols.Elements<Column>())
+            {
+                if (col.Min == null || col.Max == null) continue;
+                uint? style = col.Style?.Value;
+
+                for (uint c = col.Min.Value; c <= col.Max.Value; c++)
+                    dic[(int)c] = style;
+            }
+
+            return dic;
+        }
+
+        private static Cell? FindCellInRowByColumnIndex(Row row, int colIndex1Based)
+        {
+            if (row == null) return null;
+            if (colIndex1Based < 1) return null;
+
+            string colName = AddressConverter.ToColumnName(colIndex1Based);
+
+            foreach (var c in row.Elements<Cell>())
+            {
+                var r = c.CellReference?.Value;
+                if (string.IsNullOrEmpty(r)) continue;
+
+                // "BC12" → "BC"
+                string existingCol = new string(r.TakeWhile(char.IsLetter).ToArray());
+                if (string.Equals(existingCol, colName, StringComparison.Ordinal))
+                    return c;
+            }
+
+            return null;
+        }
+
+        private static void InsertCellInOrder(Row row, Cell newCell)
+        {
+            // 列順で挿入したいので、次に大きい列参照の直前へ
+            var newRef = newCell.CellReference?.Value;
+            if (string.IsNullOrEmpty(newRef))
+            {
+                row.AppendChild(newCell);
+                return;
+            }
+
+            var refCell = row.Elements<Cell>()
+                .FirstOrDefault(c =>
+                {
+                    var r = c.CellReference?.Value;
+                    if (string.IsNullOrEmpty(r)) return false;
+                    return CompareCellRefByColumn(r, newRef) > 0;
+                });
+
+            if (refCell != null) row.InsertBefore(newCell, refCell);
+            else row.AppendChild(newCell);
+        }
+
+        private static int CompareCellRefByColumn(string aRef, string bRef)
+        {
+            // "AA10" の "AA" だけを取り出して比較（行番号は無視）
+            string aCol = new string(aRef.TakeWhile(char.IsLetter).ToArray());
+            string bCol = new string(bRef.TakeWhile(char.IsLetter).ToArray());
+            return string.Compare(aCol, bCol, StringComparison.Ordinal);
+        }
     }
 }

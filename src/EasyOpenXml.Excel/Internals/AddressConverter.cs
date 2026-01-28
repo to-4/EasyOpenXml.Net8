@@ -106,5 +106,18 @@ namespace EasyOpenXml.Excel.Internals
             var digits = new string(a1.SkipWhile(char.IsLetter).ToArray());
             return $"${letters}${digits}";
         }
+
+        internal static string ToColumnName(int col)
+        {
+            int c = col;
+            string s = "";
+            while (c > 0)
+            {
+                c--;
+                s = (char)('A' + (c % 26)) + s;
+                c /= 26;
+            }
+            return s;
+        }
     }
 }
