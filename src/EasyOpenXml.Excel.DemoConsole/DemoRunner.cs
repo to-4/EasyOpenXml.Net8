@@ -24,7 +24,8 @@ internal static class DemoRunner
             //{ "10", Demos.Demo10_RowDelete.Run },
             //{ "11", Demos.Demo11_SetCalcMode.Run },
             //{ "12", Demos.Demo12_Logger.Run },
-            { "13", Demos.Demo13_ExportSharedFormulas.Run },
+            //{ "13", Demos.Demo13_ExportSharedFormulas.Run },
+            { "14", Demos.Demo14_BackColor.Run },
         };
 
         // 引数なし or all → 全実行

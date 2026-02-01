@@ -12,6 +12,14 @@ namespace EasyOpenXml.Excel.Internals
     {
         private readonly SpreadsheetDocument _document;
         private readonly WorksheetPart _worksheetPart;
+
+        /// <summary>
+        /// 列のスタイルインデックステーブル
+        /// <para>コンストラクタ時に呼び出し</para>
+        /// <para>ベーススタイルID取得時の使用</para>
+        /// </summary>
+        private readonly ColumnStyleIndexMap _columnStyleMap;
+
         private readonly int _sx;
         private readonly int _sy;
         private readonly int _ex;
@@ -29,13 +37,13 @@ namespace EasyOpenXml.Excel.Internals
             WorksheetPart worksheetPart,
             int sx, int sy, int ex, int ey)
         {
-            // 1. Validate arguments (assume 1-based coordinates: (1,1) = A1)
+            // 1. 引数を検証
             if (document == null) throw new ArgumentNullException(nameof(document));
             if (worksheetPart == null) throw new ArgumentNullException(nameof(worksheetPart));
             if (sx <= 0 || sy <= 0 || ex <= 0 || ey <= 0)
                 throw new ArgumentOutOfRangeException("Coordinates must be 1-based and positive.");
 
-            // 2. Normalize range
+            // 2. 範囲指定
             _sx = Math.Min(sx, ex);
             _sy = Math.Min(sy, ey);
             _ex = Math.Max(sx, ex);
@@ -43,8 +51,10 @@ namespace EasyOpenXml.Excel.Internals
 
             _document = document;
             _worksheetPart = worksheetPart;
-
             _sharedStrings = new SharedStringManager(_document);
+
+            // 列のスタイルIDテーブルを設定
+            _columnStyleMap = new ColumnStyleIndexMap(_worksheetPart.Worksheet);
         }
 
         internal SpreadsheetDocument Document => _document;
@@ -369,14 +379,17 @@ namespace EasyOpenXml.Excel.Internals
             var baseCell = GetOrCreateCell(_sx, _sy, create: true);
             var baseStyleIndex = baseCell.StyleIndex?.Value ?? 0U;
 
-            var newStyleIndex = styleManager.GetOrCreateAlignmentStyle(
-                baseStyleIndex,
-                horizontal,
-                vertical,
-                wrapText);
+            // #########################
+            // pending 2026/02/01
+            //var newStyleIndex = styleManager.GetOrCreateAlignmentStyle(
+            //    baseStyleIndex,
+            //    horizontal,
+            //    vertical,
+            //    wrapText);
 
-            // 3. Apply style to merged range
-            ApplyStyle(newStyleIndex);
+            //// 3. Apply style to merged range
+            //ApplyStyle(newStyleIndex);
+            // #########################
         }
 
 
@@ -511,5 +524,215 @@ namespace EasyOpenXml.Excel.Internals
             string bCol = new string(bRef.TakeWhile(char.IsLetter).ToArray());
             return string.Compare(aCol, bCol, StringComparison.Ordinal);
         }
+
+
+        /// <summary>
+        /// カラーオブジェクトを、ARGB 16進（例: "FFFF0000"）に変換します
+        /// </summary>
+        /// <param name="color">カラーオブジェクト</param>
+        /// <returns>ARGB 16進 (例: @"FFFF0000") 文字列を返します</returns>
+        private static string ToArgbHex(System.Drawing.Color color)
+        {
+            // AARRGGBB
+            return color.A.ToString("X2", CultureInfo.InvariantCulture)
+                 + color.R.ToString("X2", CultureInfo.InvariantCulture)
+                 + color.G.ToString("X2", CultureInfo.InvariantCulture)
+                 + color.B.ToString("X2", CultureInfo.InvariantCulture);
+        }
+
+        /// <summary>
+        /// PosProxy で管理している範囲の、各セルデータ（Cell オブジェクト）を一つずつ返します
+        /// <para>列挙メソッド</para>
+        /// </summary>
+        /// <param name="create">作成フラグ（true の場合、null であれば新規作成）</param>
+        /// <returns>セルデータ（Cell オブジェクト）をひとつずつ返す</returns>
+        internal System.Collections.Generic.IEnumerable<Cell> EnumerateTargetCells(bool create)
+        {
+            // 1. SheetData を準備
+            var sheetData = _worksheetPart.Worksheet.GetFirstChild<SheetData>();
+            if (sheetData == null)
+            {
+                if (!create)
+                {
+                    yield break; // 列挙メソッドを終了
+                }
+
+                sheetData = _worksheetPart.Worksheet.AppendChild(new SheetData());
+            }
+
+            // 2. 範囲内の各セルデータ（Cell オブジェクト）を返す
+            for (int row = _sy; row <= _ey; row++)
+            {
+                for (int col = _sx; col <= _ex; col++)
+                {
+                    // セルオブジェクトを取得
+                    var cell = GetOrCreateCell(col, row, create);
+                    if (cell != null)
+                    {
+                        // セルオブジェクトを返し、次に呼ばれるまでストップ
+                        yield return cell;
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        /// 指定されたセルオブジェクトを基に、セル書式用のスタイルIDを取得します
+        /// <para>下記の優先順位で取得</para>
+        /// <para>1. セルが持つ書式情報のスタイルID</para>
+        /// <para>2. 列が持つ書式情報のスタイルID</para>
+        /// <para>3. 行が持つ書式情報のスタイルID</para>
+        /// <para>4. ブックがテンプレートの書式情報のスタイルID</para>
+        /// </summary>
+        /// <param name="cell">セルオブジェクト</param>
+        /// <returns>セル書式用のスタイルID</returns>
+        internal uint ResolveBaseStyleIndex(Cell cell)
+        {
+            if (cell == null)
+            {
+                throw new ArgumentNullException(nameof(cell));
+            }
+
+            // 1. セルが持つ書式情報のスタイルID
+            if (cell.StyleIndex != null)
+            {
+                return cell.StyleIndex.Value;
+            }
+
+            // 2. セル番地（行番号、列番号）を取得
+            var a1 = cell.CellReference?.Value;
+            if (string.IsNullOrEmpty(a1))
+            {
+                return 0U; // セル番地無し
+            }
+            if (!AddressConverter.TryParseA1(a1, out var col, out var row))
+            {
+                return 0U; // セル番地が不正
+            }
+
+            // 3. Column style (Column.Style)
+            var colStyle = _columnStyleMap.TryGetStyleIndex(col);
+            if (colStyle.HasValue)
+                return colStyle.Value;
+
+            // 3) Row style (Row.StyleIndex)
+            var sheetData = _worksheetPart.Worksheet.GetFirstChild<SheetData>();
+            if (sheetData != null)
+            {
+                var rowElem = sheetData.Elements<Row>()
+                    .FirstOrDefault(r => r.RowIndex != null && r.RowIndex.Value == (uint)row);
+
+                if (rowElem != null && rowElem.StyleIndex != null)
+                    return rowElem.StyleIndex.Value;
+            }
+
+
+            // 5) Default style
+            return 0U;
+        }
+
+        /// <summary>
+        /// 列情報スタイルIDテーブルクラス
+        /// <para>セルのベーススタイルIDの取得時に使用</para>
+        /// </summary>
+        private sealed class ColumnStyleIndexMap
+        {
+            private readonly Span[] _spans;
+
+            internal ColumnStyleIndexMap(Worksheet ws)
+            {
+                var columns = ws.Elements<Columns>().FirstOrDefault();
+                if (columns == null)
+                {
+                    _spans = Array.Empty<Span>();
+                    return;
+                }
+
+                // Columns は重複/上書きがあり得るので、定義順を保持する（後勝ちにする）
+                var list = new System.Collections.Generic.List<Span>();
+
+                foreach (var c in columns.Elements<Column>())
+                {
+                    if (c.Style == null) continue;
+
+                    int min = (int)(c.Min?.Value ?? 1);
+                    int max = (int)(c.Max?.Value ?? (uint)min);
+                    uint style = (uint)c.Style.Value;
+
+                    list.Add(new Span(min, max, style));
+                }
+
+                _spans = list.ToArray();
+            }
+
+            internal uint? TryGetStyleIndex(int col)
+            {
+                // 後勝ち（後から定義された Column を優先）
+                for (int i = _spans.Length - 1; i >= 0; i--)
+                {
+                    var s = _spans[i];
+                    if (s.Min <= col && col <= s.Max)
+                        return s.Style;
+                }
+                return null;
+            }
+
+            private readonly struct Span
+            {
+                public readonly int Min;
+                public readonly int Max;
+                public readonly uint Style;
+
+                public Span(int min, int max, uint style)
+                {
+                    Min = min;
+                    Max = max;
+                    Style = style;
+                }
+            }
+        }
+
+        /// <summary>
+        /// 指定された背景色を各セルの書式に設定します
+        /// </summary>
+        /// <param name="styleManager">スタイル管理オブジェクト</param>
+        /// <param name="color">背景色</param>
+        internal void SetBackColor(StyleManager styleManager, System.Drawing.Color color)
+        {
+
+            // 1. 背景色を取得
+            var rgb = ToArgbHex(color);
+
+            // 2. 塗りつぶし仕様データを取得
+            var fill = new FillSpec(rgb);
+
+            // 局所的なスタイルテーブル初期化
+            var localCache = new Dictionary<uint, uint>();
+
+            // 範囲内のセルを反復
+            foreach (var cell in EnumerateTargetCells(create: true))
+            {
+                // スタイルインデックスを取得
+                uint baseStyleIndex = ResolveBaseStyleIndex(cell);
+
+                if (!localCache.TryGetValue(baseStyleIndex, out var newStyleIndex))
+                {
+                    // 局所的なスタイルテーブルには無し
+                    // 新しいスタイルID を取得 ※ 引数の背景色を反映
+                    newStyleIndex = styleManager.GetOrCreateStyle(
+                        baseStyleIndex: baseStyleIndex,
+                        fill: fill);
+
+                    localCache.Add(baseStyleIndex, newStyleIndex);
+                }
+
+                // スタイルIDにセット
+                cell.StyleIndex = newStyleIndex;
+            }
+
+            _worksheetPart.Worksheet.Save();
+        }
+
+
     }
 }
